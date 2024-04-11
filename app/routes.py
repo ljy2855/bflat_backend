@@ -18,14 +18,18 @@ def configure_routes(app):
             response = BalanceResponse(
                 volumes=None, success=False, error_message="No file part"
             )
-            return Response(response.json(), status=400, mimetype="application/json")
+            return Response(
+                response.model_dump_json(), status=400, mimetype="application/json"
+            )
 
         file = request.files["file"]
         if file.filename == "":
             response = BalanceResponse(
                 volumes=None, success=False, error_message="No selected file"
             )
-            return Response(response.json(), status=400, mimetype="application/json")
+            return Response(
+                response.model_dump_json(), status=400, mimetype="application/json"
+            )
 
         filename = secure_filename(file.filename)
         filepath = os.path.join("/tmp", filename)
@@ -41,7 +45,9 @@ def configure_routes(app):
         response = BalanceResponse(
             volumes=InstrumentVolumes(**volumes_dict), success=True
         )
-        return Response(response.json(), status=200, mimetype="application/json")
+        return Response(
+            response.model_dump_json(), status=200, mimetype="application/json"
+        )
 
     @app.route("/analysis", methods=["POST"])
     def analysis():
