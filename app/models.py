@@ -10,6 +10,6 @@ class InstrumentVolumes(BaseModel):
 
 
 class BalanceResponse(BaseModel):
-    volumes: InstrumentVolumes
+    volumes: Optional[InstrumentVolumes] = None
     success: bool
     error_message: Optional[str] = None
