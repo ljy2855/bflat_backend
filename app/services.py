@@ -3,7 +3,7 @@ import boto3
 import os
 
 
-def make_prediction(file):
+def check_sound(file):
     # 악기별 sound 반환
     return {
         "guitar": 20,

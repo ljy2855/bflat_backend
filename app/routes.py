@@ -3,7 +3,7 @@ from werkzeug.utils import secure_filename
 import os
 
 from app.models import *
-from app.services import make_prediction, separate_instruments
+from app.services import check_sound, separate_instruments
 from app.utils import *
 
 
@@ -37,7 +37,7 @@ def configure_routes(app):
         file.save(filepath)
 
         # 서비스 로직 호출
-        volumes_dict = make_prediction(filepath)
+        volumes_dict = check_sound(filepath)
 
         # 파일 처리 후 서버에서 파일 삭제
         os.remove(filepath)
