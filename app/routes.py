@@ -3,7 +3,7 @@ from werkzeug.utils import secure_filename
 import os
 
 from app.models import *
-from app.services import make_prediction, seperate_instructment
+from app.services import make_prediction, separate_instruments
 from app.utils import *
 
 
@@ -74,7 +74,7 @@ def configure_routes(app):
         filepath = os.path.join("/tmp", filename)
         file.save(filepath)
 
-        instructments = seperate_instructment(filepath)
+        instructments = separate_instruments(filepath)
 
         response = AnalysisResponse(
             files=InstrumentFileUrls(**instructments), success=True

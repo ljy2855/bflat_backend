@@ -2,3 +2,4 @@ venv
 *.zip
 __pycache__
 zappa_settings.json
+local_storage

@@ -1,3 +1,4 @@
+import shutil
 import boto3
 import os
 
@@ -12,14 +13,39 @@ def make_prediction(file):
     }
 
 
-def seperate_instructment(file):
-    # 악기 분리 로직
+def separate_instruments(file_path):
+    """악기별로 파일을 분리하고 저장한 후 접근 가능한 경로를 반환"""
     return {
-        "guitar": upload_file_to_s3(file, "guitar"),
-        "drums": upload_file_to_s3(file, "drums"),
-        "bass": upload_file_to_s3(file, "bass"),
-        "vocal": upload_file_to_s3(file, "vocal"),
+        "guitar": save_file_based_on_environment(file_path, "guitar.wav"),
+        "drums": save_file_based_on_environment(file_path, "drums.wav"),
+        "bass": save_file_based_on_environment(file_path, "bass.wav"),
+        "vocal": save_file_based_on_environment(file_path, "vocal.wav"),
     }
+
+
+def save_file_based_on_environment(file_path, filename):
+    """환경에 따라 파일 저장 방식 선택"""
+    if os.getenv("FLASK_ENV") == "DEPLOY":
+        return upload_file_to_s3(file_path, filename)
+    else:
+        return save_local(file_path, filename)
+
+
+def save_local(file_path, filename):
+    """로컬 파일 시스템에 파일 저장"""
+    local_storage_path = "local_storage"
+    if not os.path.exists(local_storage_path):
+        os.makedirs(local_storage_path)
+
+    local_file_path = os.path.join(local_storage_path, filename)
+    # 파일 복사 사용
+    if os.path.exists(file_path):
+        shutil.copy(file_path, local_file_path)
+        # 절대 경로 반환
+        return os.path.abspath(local_file_path)
+    else:
+        print(f"Error: File not found at {file_path}")
+        return None  # 파일이 없는 경우 None 반환
 
 
 def upload_file_to_s3(file_path, filename, expiration=3600):
