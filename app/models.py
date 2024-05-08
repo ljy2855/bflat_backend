@@ -13,3 +13,16 @@ class BalanceResponse(BaseModel):
     volumes: Optional[InstrumentVolumes] = None
     success: bool
     error_message: Optional[str] = None
+
+
+class InstrumentFileUrls(BaseModel):
+    guitar: str
+    drums: str
+    bass: str
+    vocal: str
+
+
+class AnalysisResponse(BaseModel):
+    files: Optional[InstrumentFileUrls] = None
+    success: bool
+    error_message: Optional[str] = None

@@ -3,7 +3,7 @@ from werkzeug.utils import secure_filename
 import os
 
 from app.models import *
-from app.services import make_prediction
+from app.services import make_prediction, seperate_instructment
 from app.utils import *
 
 
@@ -14,6 +14,7 @@ def configure_routes(app):
 
     @app.route("/balance", methods=["POST"])
     def balance():
+        # request로부터 file 추출
         if "file" not in request.files:
             response = BalanceResponse(
                 volumes=None, success=False, error_message="No file part"
@@ -51,4 +52,33 @@ def configure_routes(app):
 
     @app.route("/analysis", methods=["POST"])
     def analysis():
-        return "analysis"
+        # request로부터 file 추출
+        if "file" not in request.files:
+            response = BalanceResponse(
+                volumes=None, success=False, error_message="No file part"
+            )
+            return Response(
+                response.model_dump_json(), status=400, mimetype="application/json"
+            )
+
+        file = request.files["file"]
+        if file.filename == "":
+            response = BalanceResponse(
+                volumes=None, success=False, error_message="No selected file"
+            )
+            return Response(
+                response.model_dump_json(), status=400, mimetype="application/json"
+            )
+
+        filename = secure_filename(file.filename)
+        filepath = os.path.join("/tmp", filename)
+        file.save(filepath)
+
+        instructments = seperate_instructment(filepath)
+
+        response = AnalysisResponse(
+            files=InstrumentFileUrls(**instructments), success=True
+        )
+        return Response(
+            response.model_dump_json(), status=200, mimetype="application/json"
+        )
