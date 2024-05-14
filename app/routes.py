@@ -8,7 +8,14 @@ from app.utils import *
 
 
 def configure_routes(app):
-    @app.route("/")
+    # request로부터 file 추출
+    tmp = input("곡의 이름 입력 : ")
+    filename = tmp + '.wav'
+    filepath = os.path.join('local_storage', filename)
+    
+    instructments = separate_instruments(filepath, tmp)
+
+    """@app.route("/")
     def index():
         return "Welcome to the Model API"
 
@@ -82,3 +89,4 @@ def configure_routes(app):
         return Response(
             response.model_dump_json(), status=200, mimetype="application/json"
         )
+"""
