@@ -7,6 +7,7 @@ import librosa
 import subprocess
 import soundfile as sf
 import shutil
+import sys
 
 def check_sound(file):
     # 악기별 sound 반환
@@ -29,9 +30,12 @@ def separate_instruments(file_path, file_name):
     if not os.path.exists(separate_path):
         os.makedirs(separate_path)
 
+    full_file_path = os.path.abspath(file_path)
+    full_separate_path = os.path.abspath(separate_path)
+
     print("Separate using Demucs")
     # Run Demucs separation
-    subprocess.run(["python3", "-m", "demucs", "-d", "cpu", "-o", separate_path, file_path])
+    subprocess.run([sys.executable, "-m", "demucs", "-d", "cpu", "-o", full_separate_path, full_file_path])
 
     # Instruments that Demucs separates into
     instruments = ['bass', 'drums', 'vocals', 'other']
