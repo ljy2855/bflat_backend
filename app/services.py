@@ -20,9 +20,9 @@ def check_sound(file):
 
 def separate_instruments(file_path, file_name):
     print("Load Audio")
-    #y, sr = librosa.load(file_path, sr=44100)
+    y, sr = librosa.load(file_path, sr=44100)
     print("Remove noise")
-    #y = nr.reduce_noise(y=y, sr=sr)
+    y = nr.reduce_noise(y=y, sr=sr)
 
     # Define the output directory for the separated tracks
     separate_path = os.path.join(os.path.dirname(file_path), 'separated')
@@ -31,7 +31,7 @@ def separate_instruments(file_path, file_name):
 
     print("Separate using Demucs")
     # Run Demucs separation
-    #subprocess.run(["python3", "-m", "demucs", "-d", "cpu", "-o", separate_path, file_path])
+    subprocess.run(["python3", "-m", "demucs", "-d", "cpu", "-o", separate_path, file_path])
 
     # Instruments that Demucs separates into
     instruments = ['bass', 'drums', 'vocals', 'other']
