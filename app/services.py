@@ -14,6 +14,9 @@ import pyloudnorm as pyln
 
 def check_sound(file):
     # 악기별 sound 반환
+    # file로 input이 들어온다고 가정하시고 작성해주심 되겠습니다.
+    # 일단은 직접 작성하신 코드로 테스트 이후에 끝나면 옮길 예정이긴 합니다.
+    
     return {
         "guitar": 20,
         "drums": 80.1,
@@ -69,6 +72,10 @@ def separate_instruments(file_path, file_name):
     optimize_bass(paths['bass'])
     optimize_vocals(paths['vocals'])
     optimize_other(paths['other'], paths['drums'], paths['bass'])
+
+    # 이 부분에 drum beat 관련 함수 연결해주시면 될 것 같습니다.
+    # 현재는 paths[]에 파일이 연결되어 있는 상태입니다.
+    # 함수 추가 작성은 하단에 부탁드립니다.
 
     return paths
 
