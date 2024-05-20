@@ -12,17 +12,71 @@ from scipy.ndimage import uniform_filter1d
 from scipy.signal import butter, sosfilt
 import pyloudnorm as pyln
 
+# 일정 음량 이하의 음원 파일 삭제
+def remove_silent_files(output_dir, stem, threshold=0.01):
+    file_path = os.path.join(output_dir, f"{stem}.wav")
+    if os.path.exists(file_path):
+        y, sr = librosa.load(file_path, sr=None)
+        rms = librosa.feature.rms(y=y).mean()
+        if rms < threshold:
+            print(f"Remove {stem}")
+            os.remove(file_path)
+            return 0.0
+        else:
+            print(f"Keep {stem}")
+            y_abs = np.abs(y)
+            med = np.median(y_abs)
+            return med
+    else:
+        print(f"File {stem} does not exist.")
+        return 0.0
+    
 def check_sound(file):
+    class Volume:
+        def __init__(self, name, volume):
+            self.name = name
+            self.volume = volume
+
+    # 파일 경로 설정
+    stems = ['vocals', 'drums', 'bass', 'other']
+    db_stems = {}
+
+    # 각 파일에 대해 처리
+    for stem in stems:
+        db_stems[stem] = remove_silent_files(file, stem, threshold=0.01)
+
+    # 전체 음원의 중앙값 구하기
+    origin_path = os.path.join(file, "원본음원 경로")  # 전체 음원 파일의 경로를 설정합니다.
+    if os.path.exists(origin_path):
+        audio, sr = librosa.load(origin_path, sr=None)
+        origin_abs = np.abs(audio)
+        origin_med = np.median(origin_abs)
+        if origin_med == 0:
+            raise ValueError("The median of the original audio is 0, cannot scale volumes.")
+    else:
+        raise FileNotFoundError(f"Origin file does not exist at path: {origin_path}")
+
+    # 각 악기의 볼륨 계산 및 출력
+    volumes = []
+    for stem, med in db_stems.items():
+        if med > 0:
+            volume_value = (50 / origin_med) * med
+        else:
+            volume_value = 0
+        volume = Volume(name=stem, volume=volume_value)
+        volumes.append(volume)
+        
+    
     # 악기별 sound 반환
     # file로 input이 들어온다고 가정하시고 작성해주심 되겠습니다.
     # 일단은 직접 작성하신 코드로 테스트 이후에 끝나면 옮길 예정이긴 합니다.
     
     return {
-        "guitar": 20,
-        "drums": 80.1,
-        "bass": 30,
-        "vocal": 40,
-    }
+        "other": volumes.get('other', 0),
+        "drums": volumes.get('drums', 0),
+        "bass": volumes.get('bass', 0),
+        "vocal": volumes.get('vocals', 0),
+    } 
 
 
 def separate_instruments(file_path, file_name):
@@ -73,11 +127,67 @@ def separate_instruments(file_path, file_name):
     optimize_vocals(paths['vocals'])
     optimize_other(paths['other'], paths['drums'], paths['bass'])
 
+    # 여기서부터 bpm 측정
+    class mergedbeat:
+        def __init__(self, start, duration, bpm):
+            self.start = start
+            self.duration = duration
+            self.bpm = bpm
+            
+    #bpm, 박자 임의설정 (받아오기?)
+    meter = 4
+    getbpm = 168
+
+    # 예상 duration time
+    expected_duration = 60/getbpm * meter
+    
+    # WAV 파일 로드
+    audio, sr = librosa.load(paths['drums'], sr=None)
+
+    # 템포 추정 및 비트 추출
+    tempo, beat_frames = librosa.beat.beat_track(y=audio, sr=sr)
+
+    # 마디 위치 계산
+    beat_times = librosa.frames_to_time(beat_frames, sr=sr)
+
+    measure_meter = []
+    # 머신에서 도출된 duration / bpm 계산
+    for i in range(len(beat_times) - 1):
+        duration = beat_times[i+1] - beat_times[i]
+        meter = expected_duration / duration
+        measure_meter.append(meter)
+
+    # 평균 kick 수 구하기
+    tot_meter = sum(measure_meter)  # measure_beats 리스트의 meter 속성의 합계 계산
+    avg_meter_f = tot_meter / len(measure_meter)  # 평균 meter 계산
+    avg_meter = int(round(avg_meter_f * 2) / 2)
+    
+    # Bar를 합쳐서 마디로 만들기
+    merged_beat_times = []
+    for i in range(0, len(beat_times), avg_meter):
+        if i + avg_meter < len(beat_times):  # 다음 Bar가 존재하는 경우에만 합치기
+            merged_beat_times.append((beat_times[i], beat_times[i + avg_meter]))
+
+    merged_beats = []
+    # 합쳐진 Bar의 BPM 계산 및 출력
+    for i, (start_time, end_time) in enumerate(merged_beat_times):
+        measure_duration = end_time - start_time
+        bpm = 60 / measure_duration * meter 
+        # MergedBeat 인스턴스 생성 및 리스트에 추가
+        merged_beat = mergedbeat(start = start_time, duration=measure_duration, bpm=bpm)
+        merged_beats.append(merged_beat)
+    
+    
     # 이 부분에 drum beat 관련 함수 연결해주시면 될 것 같습니다.
     # 현재는 paths[]에 파일이 연결되어 있는 상태입니다.
     # 함수 추가 작성은 하단에 부탁드립니다.
 
     return paths
+
+
+
+    
+
 
 def remove_low_amplitude(y, threshold_db):
     # Calculate the amplitude of the signal
