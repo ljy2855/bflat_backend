@@ -17,11 +17,20 @@ def configure_routes(app):
     filename = tmp + '.wav'
     filepath = os.path.join('local_storage', filename)
 
+    stem = {
+    "bass": input("Bass 포함 여부 (t/f): ").strip().lower() == 't',
+    "drums": input("Drums 포함 여부 (t/f): ").strip().lower() == 't',
+    "vocals": input("Vocals 포함 여부 (t/f): ").strip().lower() == 't',
+    "other": input("Other 포함 여부 (t/f): ").strip().lower() == 't'
+    }
+
+    volumes_dict = check_sound(filepath, stem)
+
     bpm = int(input("BPM: "))
     meter = int(input("Meter: "))
     bpm_meter = BPMMeter(bpm=bpm, meter=meter)
     
-    instructments = separate_instruments(filepath, tmp, bpm_meter)
+    instructments = separate_instruments(filepath, bpm_meter, stem)
 
     """@app.route("/")
     def index():

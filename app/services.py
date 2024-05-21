@@ -2,7 +2,6 @@ from app.utils import save_file_based_on_environment
 import os
 import noisereduce as nr
 import numpy as np
-import torch
 import librosa
 import subprocess
 import soundfile as sf
@@ -37,8 +36,7 @@ def remove_silent_files(file_path, threshold=0.01):
         print(f"File {os.path.basename(file_path)} does not exist.")
         return 0.0
 
-    
-def check_sound(file):
+def check_sound(file, stem):
     # 분리할 임시 디렉토리 설정
     separate_path = os.path.join(os.path.dirname(file), 'separated_temp')
     if not os.path.exists(separate_path):
@@ -57,12 +55,12 @@ def check_sound(file):
 
     # 악기별로 분리된 파일 경로 저장
     for instrument in instruments:
-        source_path = os.path.join(separate_path, 'htdemucs', os.path.splitext(os.path.basename(file))[0], instrument + ".wav")
-        if os.path.exists(source_path):
-            paths[instrument] = source_path
-        else:
-            print(f"Warning: The expected file {source_path} does not exist.")
-    
+        if stem.get(instrument, False):  # stem에서 해당 악기가 True일 때만 처리
+            source_path = os.path.join(separate_path, 'htdemucs', os.path.splitext(os.path.basename(file))[0], instrument + ".wav")
+            if os.path.exists(source_path):
+                paths[instrument] = source_path
+            else:
+                print(f"Warning: The expected file {source_path} does not exist.")
 
     # 각 파일에 대해 처리
     db_stems = {}
@@ -94,14 +92,9 @@ def check_sound(file):
         print(f"'{separate_path}' 디렉토리는 존재하지 않습니다.")
     
     # 악기별 sound 반환    
-    return {
-        "other": volumes.get('other', 0),
-        "drums": volumes.get('drums', 0),
-        "bass": volumes.get('bass', 0),
-        "vocal": volumes.get('vocals', 0),
-    }
+    return volumes
 
-def separate_instruments(file_path, file_name, bpm_meter: BPMMeter):
+def separate_instruments(file_path, bpm_meter: BPMMeter, stem):
     # 샘플링 레이트 통일 및 음원 로드
     print("Load Audio")
     y, sr = librosa.load(file_path, sr=44100)
@@ -127,12 +120,13 @@ def separate_instruments(file_path, file_name, bpm_meter: BPMMeter):
 
     # save_file_based_on_environment 함수를 이용하여 악기별로 local_storage 폴더로 이동하여 저장
     for instrument in instruments:
-        source_path = os.path.join(separate_path, 'htdemucs', file_name, instrument + ".wav")
-        if os.path.exists(source_path):
-            saved_path = save_file_based_on_environment(source_path, instrument + ".wav")
-            paths[instrument] = saved_path
-        else:
-            print(f"Warning: The expected file {source_path} does not exist.")
+        if stem.get(instrument, False):  # stem에서 해당 악기가 True일 때만 처리
+            source_path = os.path.join(separate_path, 'htdemucs', os.path.splitext(os.path.basename(file_path))[0], instrument + ".wav")
+            if os.path.exists(source_path):
+                saved_path = save_file_based_on_environment(source_path, instrument + ".wav")
+                paths[instrument] = saved_path
+            else:
+                print(f"Warning: The expected file {source_path} does not exist.")
     
     if os.path.exists(separate_path):
         # separated 디렉토리와 내용물 전체 삭제
@@ -144,10 +138,14 @@ def separate_instruments(file_path, file_name, bpm_meter: BPMMeter):
     # 여기까지 음원 분리 및 파일 저장 완료
     # 이후부터는 분리된 음원 개선 및 마디 분리, 원곡과 녹음본 비교 진행
 
-    optimize_drums(paths['drums'])
-    optimize_bass(paths['bass'])
-    optimize_vocals(paths['vocals'])
-    optimize_other(paths['other'], paths['drums'], paths['bass'])
+    if 'drums' in paths:
+        optimize_drums(paths['drums'])
+    if 'bass' in paths:
+        optimize_bass(paths['bass'])
+    if 'vocals' in paths:
+        optimize_vocals(paths['vocals'])
+    if 'other' in paths:
+        optimize_other(paths['other'], paths.get('drums', None), paths.get('bass', None))
 
     # bpm 측정
     # 예상 duration time
@@ -191,9 +189,6 @@ def separate_instruments(file_path, file_name, bpm_meter: BPMMeter):
     
     return paths
 
-    
-
-
 def remove_low_amplitude(y, threshold_db):
     # Calculate the amplitude of the signal
     amplitude = np.abs(y)
@@ -229,7 +224,6 @@ def optimize_drums(file_drums):
     y, sr = librosa.load(file_drums, sr=44100)
     y = remove_low_amplitude(y, threshold_db=-40)
     sf.write(file_drums, y, sr)
-
     return
 
 def optimize_bass(file_bass):
@@ -239,7 +233,6 @@ def optimize_bass(file_bass):
     y = remove_low_amplitude(y, threshold_db=-40)
     y = smooth_signal(y, window_size=100)
     sf.write(file_bass, y, sr)
-
     return
 
 def optimize_vocals(file_vocals):
@@ -265,10 +258,9 @@ def optimize_vocals(file_vocals):
     # Ensure that the signal does not clip
     y = np.clip(y, -1.0, 1.0)
     sf.write(file_vocals, y, sr)
-
     return
 
 def optimize_other(file_other, file_drums, file_bass):
     # other 파일로부터 drums.wav, bass.wav와 겹치는 음 제거
-
     return
+
