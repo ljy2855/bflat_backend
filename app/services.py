@@ -10,7 +10,7 @@ import sys
 from scipy.ndimage import uniform_filter1d
 from scipy.signal import butter, sosfilt
 import pyloudnorm as pyln
-from app.routes import BPMMeter
+from app.models import BPMMeter
 
 class mergedbeat:
     def __init__(self, start, duration, bpm):

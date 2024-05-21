@@ -3,10 +3,10 @@ from typing import Optional, Dict
 
 
 class InstrumentVolumes(BaseModel):
-    guitar: float
+    other: float
     drums: float
     bass: float
-    vocal: float
+    vocals: float
 
 
 class BalanceResponse(BaseModel):
@@ -16,13 +16,18 @@ class BalanceResponse(BaseModel):
 
 
 class InstrumentFileUrls(BaseModel):
-    guitar: str
+    other: str
     drums: str
     bass: str
-    vocal: str
+    vocals: str
 
 
 class AnalysisResponse(BaseModel):
     files: Optional[InstrumentFileUrls] = None
     success: bool
     error_message: Optional[str] = None
+
+class BPMMeter:
+    def __init__(self, bpm, meter):
+        self.bpm = bpm
+        self.meter = meter
