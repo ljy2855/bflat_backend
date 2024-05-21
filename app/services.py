@@ -20,52 +20,78 @@ class mergedbeat:
         self.bpm = bpm
 
 # 일정 음량 이하의 음원 파일 삭제
-def remove_silent_files(output_dir, stem, threshold=0.01):
-    file_path = os.path.join(output_dir, f"{stem}.wav")
+def remove_silent_files(file_path, threshold=0.01):
     if os.path.exists(file_path):
         y, sr = librosa.load(file_path, sr=44100)
         rms = librosa.feature.rms(y=y).mean()
         if rms < threshold:
-            print(f"Remove {stem}")
+            print(f"Remove {os.path.basename(file_path)}")
             os.remove(file_path)
             return 0.0
         else:
-            print(f"Keep {stem}")
+            print(f"Keep {os.path.basename(file_path)}")
             y_abs = np.abs(y)
             med = np.median(y_abs)
             return med
     else:
-        print(f"File {stem} does not exist.")
+        print(f"File {os.path.basename(file_path)} does not exist.")
         return 0.0
+
     
 def check_sound(file):
-    # 파일 경로 설정
-    stems = ['vocals', 'drums', 'bass', 'other']
-    db_stems = {}
+    # 분리할 임시 디렉토리 설정
+    separate_path = os.path.join(os.path.dirname(file), 'separated_temp')
+    if not os.path.exists(separate_path):
+        os.makedirs(separate_path)
+
+    # 파일 불러올, 저장할 절대 주소 저장
+    full_file_path = os.path.abspath(file)
+    full_separate_path = os.path.abspath(separate_path)
+
+    # demucs 가동
+    print("Separate using Demucs")
+    subprocess.run([sys.executable, "-m", "demucs", "-d", "cpu", "-o", full_separate_path, full_file_path])
+
+    instruments = ['bass', 'drums', 'vocals', 'other']
+    paths = {}
+
+    # 악기별로 분리된 파일 경로 저장
+    for instrument in instruments:
+        source_path = os.path.join(separate_path, 'htdemucs', os.path.splitext(os.path.basename(file))[0], instrument + ".wav")
+        if os.path.exists(source_path):
+            paths[instrument] = source_path
+        else:
+            print(f"Warning: The expected file {source_path} does not exist.")
+    
 
     # 각 파일에 대해 처리
-    for stem in stems:
-        db_stems[stem] = remove_silent_files(file, stem, threshold=0.01)
+    db_stems = {}
+    for instrument in instruments:
+        if instrument in paths:
+            db_stems[instrument] = remove_silent_files(paths[instrument], threshold=0.01)
 
     # 전체 음원의 중앙값 구하기
-    origin_path = os.path.join(file, "원본음원 경로")  # 전체 음원 파일의 경로를 설정합니다.
-    if os.path.exists(origin_path):
-        audio, sr = librosa.load(origin_path, sr=44100)
-        origin_abs = np.abs(audio)
-        origin_med = np.median(origin_abs)
-        if origin_med == 0:
-            raise ValueError("The median of the original audio is 0, cannot scale volumes.")
-    else:
-        raise FileNotFoundError(f"Origin file does not exist at path: {origin_path}")
+    audio, sr = librosa.load(file, sr=44100)
+    origin_abs = np.abs(audio)
+    origin_med = np.median(origin_abs)
+    if origin_med == 0:
+        raise ValueError("The median of the original audio is 0, cannot scale volumes.")
 
     # 각 악기의 볼륨 계산 및 출력
     volumes = {}
-    for stem, med in db_stems.items():
+    for instrument, med in db_stems.items():
         if med > 0:
             volume_value = (50 / origin_med) * med
         else:
             volume_value = 0
-        volumes[stem] = volume_value
+        volumes[instrument] = volume_value
+    
+    # separated_temp 디렉토리와 내용물 전체 삭제
+    if os.path.exists(separate_path):
+        shutil.rmtree(separate_path)
+        print(f"'{separate_path}' 디렉토리와 모든 내용물이 성공적으로 삭제되었습니다.")
+    else:
+        print(f"'{separate_path}' 디렉토리는 존재하지 않습니다.")
     
     # 악기별 sound 반환    
     return {
@@ -73,8 +99,7 @@ def check_sound(file):
         "drums": volumes.get('drums', 0),
         "bass": volumes.get('bass', 0),
         "vocal": volumes.get('vocals', 0),
-    } 
-
+    }
 
 def separate_instruments(file_path, file_name, bpm_meter: BPMMeter):
     # 샘플링 레이트 통일 및 음원 로드
