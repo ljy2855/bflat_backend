@@ -11,12 +11,19 @@ import sys
 from scipy.ndimage import uniform_filter1d
 from scipy.signal import butter, sosfilt
 import pyloudnorm as pyln
+from app.routes import BPMMeter
+
+class mergedbeat:
+    def __init__(self, start, duration, bpm):
+        self.start = start
+        self.duration = duration
+        self.bpm = bpm
 
 # 일정 음량 이하의 음원 파일 삭제
 def remove_silent_files(output_dir, stem, threshold=0.01):
     file_path = os.path.join(output_dir, f"{stem}.wav")
     if os.path.exists(file_path):
-        y, sr = librosa.load(file_path, sr=None)
+        y, sr = librosa.load(file_path, sr=44100)
         rms = librosa.feature.rms(y=y).mean()
         if rms < threshold:
             print(f"Remove {stem}")
@@ -32,11 +39,6 @@ def remove_silent_files(output_dir, stem, threshold=0.01):
         return 0.0
     
 def check_sound(file):
-    class Volume:
-        def __init__(self, name, volume):
-            self.name = name
-            self.volume = volume
-
     # 파일 경로 설정
     stems = ['vocals', 'drums', 'bass', 'other']
     db_stems = {}
@@ -48,7 +50,7 @@ def check_sound(file):
     # 전체 음원의 중앙값 구하기
     origin_path = os.path.join(file, "원본음원 경로")  # 전체 음원 파일의 경로를 설정합니다.
     if os.path.exists(origin_path):
-        audio, sr = librosa.load(origin_path, sr=None)
+        audio, sr = librosa.load(origin_path, sr=44100)
         origin_abs = np.abs(audio)
         origin_med = np.median(origin_abs)
         if origin_med == 0:
@@ -57,20 +59,15 @@ def check_sound(file):
         raise FileNotFoundError(f"Origin file does not exist at path: {origin_path}")
 
     # 각 악기의 볼륨 계산 및 출력
-    volumes = []
+    volumes = {}
     for stem, med in db_stems.items():
         if med > 0:
             volume_value = (50 / origin_med) * med
         else:
             volume_value = 0
-        volume = Volume(name=stem, volume=volume_value)
-        volumes.append(volume)
-        
+        volumes[stem] = volume_value
     
-    # 악기별 sound 반환
-    # file로 input이 들어온다고 가정하시고 작성해주심 되겠습니다.
-    # 일단은 직접 작성하신 코드로 테스트 이후에 끝나면 옮길 예정이긴 합니다.
-    
+    # 악기별 sound 반환    
     return {
         "other": volumes.get('other', 0),
         "drums": volumes.get('drums', 0),
@@ -79,7 +76,7 @@ def check_sound(file):
     } 
 
 
-def separate_instruments(file_path, file_name):
+def separate_instruments(file_path, file_name, bpm_meter: BPMMeter):
     # 샘플링 레이트 통일 및 음원 로드
     print("Load Audio")
     y, sr = librosa.load(file_path, sr=44100)
@@ -127,19 +124,9 @@ def separate_instruments(file_path, file_name):
     optimize_vocals(paths['vocals'])
     optimize_other(paths['other'], paths['drums'], paths['bass'])
 
-    # 여기서부터 bpm 측정
-    class mergedbeat:
-        def __init__(self, start, duration, bpm):
-            self.start = start
-            self.duration = duration
-            self.bpm = bpm
-            
-    #bpm, 박자 임의설정 (받아오기?)
-    meter = 4
-    getbpm = 168
-
+    # bpm 측정
     # 예상 duration time
-    expected_duration = 60/getbpm * meter
+    expected_duration = 60 / bpm_meter.bpm * bpm_meter.meter
     
     # WAV 파일 로드
     audio, sr = librosa.load(paths['drums'], sr=None)
@@ -172,19 +159,12 @@ def separate_instruments(file_path, file_name):
     # 합쳐진 Bar의 BPM 계산 및 출력
     for i, (start_time, end_time) in enumerate(merged_beat_times):
         measure_duration = end_time - start_time
-        bpm = 60 / measure_duration * meter 
+        bpm = 60 / measure_duration * bpm_meter.meter 
         # MergedBeat 인스턴스 생성 및 리스트에 추가
-        merged_beat = mergedbeat(start = start_time, duration=measure_duration, bpm=bpm)
+        merged_beat = mergedbeat(start=start_time, duration=measure_duration, bpm=bpm)
         merged_beats.append(merged_beat)
     
-    
-    # 이 부분에 drum beat 관련 함수 연결해주시면 될 것 같습니다.
-    # 현재는 paths[]에 파일이 연결되어 있는 상태입니다.
-    # 함수 추가 작성은 하단에 부탁드립니다.
-
     return paths
-
-
 
     
 
@@ -199,7 +179,9 @@ def remove_low_amplitude(y, threshold_db):
     return y
 
 def smooth_signal(y, window_size=100):
-    return uniform_filter1d(y, size=window_size)
+    y_smooth = uniform_filter1d(y, size=window_size)
+    y_smooth *= np.max(np.abs(y)) / np.max(np.abs(y_smooth))  # 재정규화
+    return y_smooth
 
 def reduce_reverb(y, sr):
     # Here you can use a simple high-pass filter to reduce low-frequency reverb
@@ -229,7 +211,7 @@ def optimize_bass(file_bass):
     # bass의 음역대가 아닌 특정 hZ 이상 음 제거
     # bass의 음이 찢어지는 경향 완화
     y, sr = librosa.load(file_bass, sr=44100)
-    y = remove_low_amplitude(y, threshold_db=-60)
+    y = remove_low_amplitude(y, threshold_db=-40)
     y = smooth_signal(y, window_size=100)
     sf.write(file_bass, y, sr)
 

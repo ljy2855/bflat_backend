@@ -6,14 +6,22 @@ from app.models import *
 from app.services import check_sound, separate_instruments
 from app.utils import *
 
+class BPMMeter:
+    def __init__(self, bpm, meter):
+        self.bpm = bpm
+        self.meter = meter
 
 def configure_routes(app):
     # request로부터 file 추출
     tmp = input("곡의 이름 입력 : ")
     filename = tmp + '.wav'
     filepath = os.path.join('local_storage', filename)
+
+    bpm = int(input("BPM: "))
+    meter = int(input("Meter: "))
+    bpm_meter = BPMMeter(bpm=bpm, meter=meter)
     
-    instructments = separate_instruments(filepath, tmp)
+    instructments = separate_instruments(filepath, tmp, bpm_meter)
 
     """@app.route("/")
     def index():
