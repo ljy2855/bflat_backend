@@ -6,7 +6,6 @@ from app.models import *
 from app.services import check_sound, separate_instruments
 from app.utils import *
 
-
 def configure_routes(app):
     @app.route("/")
     def index():
@@ -14,7 +13,6 @@ def configure_routes(app):
 
     @app.route("/balance", methods=["POST"])
     def balance():
-        # request로부터 file 추출
         if "file" not in request.files:
             response = BalanceResponse(
                 volumes=None, success=False, error_message="No file part"
@@ -32,17 +30,21 @@ def configure_routes(app):
                 response.model_dump_json(), status=400, mimetype="application/json"
             )
 
+        stem = {
+            "bass": request.form.get("bass", 'false').lower() == 'true',
+            "drums": request.form.get("drums", 'false').lower() == 'true',
+            "vocals": request.form.get("vocals", 'false').lower() == 'true',
+            "other": request.form.get("other", 'false').lower() == 'true'
+        }
+
         filename = secure_filename(file.filename)
         filepath = os.path.join("/tmp", filename)
         file.save(filepath)
 
-        # 서비스 로직 호출
-        volumes_dict = check_sound(filepath)
+        volumes_dict = check_sound(filepath, stem)
 
-        # 파일 처리 후 서버에서 파일 삭제
         os.remove(filepath)
 
-        # 응답 데이터 구성
         response = BalanceResponse(
             volumes=InstrumentVolumes(**volumes_dict), success=True
         )
@@ -52,17 +54,17 @@ def configure_routes(app):
 
     @app.route("/analysis", methods=["POST"])
     def analysis():
-        # request로부터 file 추출
-        if "file" not in request.files:
+        if "file1" not in request.files or "file2" not in request.files:
             response = BalanceResponse(
-                volumes=None, success=False, error_message="No file part"
+                volumes=None, success=False, error_message="No file1 or file2 part"
             )
             return Response(
                 response.model_dump_json(), status=400, mimetype="application/json"
             )
 
-        file = request.files["file"]
-        if file.filename == "":
+        file1 = request.files["file1"]
+        file2 = request.files["file2"]
+        if file1.filename == "" or file2.filename == "":
             response = BalanceResponse(
                 volumes=None, success=False, error_message="No selected file"
             )
@@ -70,14 +72,28 @@ def configure_routes(app):
                 response.model_dump_json(), status=400, mimetype="application/json"
             )
 
-        filename = secure_filename(file.filename)
-        filepath = os.path.join("/tmp", filename)
-        file.save(filepath)
+        filename1 = secure_filename(file1.filename)
+        filename2 = secure_filename(file2.filename)
+        filepath1 = os.path.join("/tmp", filename1)
+        filepath2 = os.path.join("/tmp", filename2)
+        file1.save(filepath1)
+        file2.save(filepath2)
 
-        instructments = separate_instruments(filepath)
+        bpm = int(request.form.get("bpm"))
+        meter = int(request.form.get("meter"))
+        stem = {
+            "bass": request.form.get("bass", 'false').lower() == 'true',
+            "drums": request.form.get("drums", 'false').lower() == 'true',
+            "vocals": request.form.get("vocals", 'false').lower() == 'true',
+            "other": request.form.get("other", 'false').lower() == 'true'
+        }
+
+        bpm_meter = BPMMeter(bpm=bpm, meter=meter)
+        instruments1 = separate_instruments(filepath1, bpm_meter, stem)
+        instruments2 = separate_instruments(filepath2, bpm_meter, stem)
 
         response = AnalysisResponse(
-            files=InstrumentFileUrls(**instructments), success=True
+            files=InstrumentFileUrls(**instruments1), success=True
         )
         return Response(
             response.model_dump_json(), status=200, mimetype="application/json"
