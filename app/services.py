@@ -164,8 +164,8 @@ def separate_instruments(file_path, bpm_meter: BPMMeter, stem):
     # 머신에서 도출된 duration / bpm 계산
     for i in range(len(beat_times) - 1):
         duration = beat_times[i+1] - beat_times[i]
-        meter = expected_duration / duration
-        measure_meter.append(meter)
+        cal_meter = expected_duration / duration
+        measure_meter.append(cal_meter)
 
     # 평균 kick 수 구하기
     tot_meter = sum(measure_meter)  # measure_beats 리스트의 meter 속성의 합계 계산
