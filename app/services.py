@@ -1,3 +1,4 @@
+import concurrent.futures
 from app.utils import save_file_based_on_environment
 import os
 import noisereduce as nr
@@ -94,12 +95,25 @@ def check_sound(file, stem):
     # 악기별 sound 반환    
     return volumes
 
-def separate_instruments(file_path, bpm_meter: BPMMeter, stem):
+def reduce_noise_and_normalize(file_path):
+    print(f"Load Audio: {file_path}")
+    y, sr = librosa.load(file_path, sr=44100)
+    print(f"Reduce noise: {file_path}")
+    y = nr.reduce_noise(y=y, sr=sr)
+    return y, sr
+
+def match_volumes(y1, y2):
+    rms1 = np.sqrt(np.mean(y1**2))
+    rms2 = np.sqrt(np.mean(y2**2))
+    y2 = y2 * (rms1 / rms2)
+    return y2
+
+def separate_and_optimize(file_path, stem):
     # 샘플링 레이트 통일 및 음원 로드
-    print("Load Audio")
+    print(f"Load Audio: {file_path}")
     y, sr = librosa.load(file_path, sr=44100)
     # 추출 전 노이즈 제거
-    print("Remove noise")
+    print(f"Remove noise: {file_path}")
     y = nr.reduce_noise(y=y, sr=sr)
 
     # 중간 저장 디렉토리 생성
@@ -112,7 +126,7 @@ def separate_instruments(file_path, bpm_meter: BPMMeter, stem):
     full_separate_path = os.path.abspath(separate_path)
 
     # demucs 가동
-    print("Separate using Demucs")
+    print(f"Separate using Demucs: {file_path}")
     subprocess.run([sys.executable, "-m", "demucs", "-d", "cpu", "-o", full_separate_path, full_file_path])
 
     instruments = ['bass', 'drums', 'vocals', 'other']
@@ -147,47 +161,67 @@ def separate_instruments(file_path, bpm_meter: BPMMeter, stem):
     if 'other' in paths:
         optimize_other(paths['other'], paths.get('drums', None), paths.get('bass', None))
 
-    # bpm 측정
-    # 예상 duration time
-    expected_duration = 60 / bpm_meter.bpm * bpm_meter.meter
-    
-    # WAV 파일 로드
+    return paths
+
+def analyze_bpm(paths, expected_duration, bpm_meter):
     audio, sr = librosa.load(paths['drums'], sr=None)
-
-    # 템포 추정 및 비트 추출
     tempo, beat_frames = librosa.beat.beat_track(y=audio, sr=sr)
-
-    # 마디 위치 계산
     beat_times = librosa.frames_to_time(beat_frames, sr=sr)
 
     measure_meter = []
-    # 머신에서 도출된 duration / bpm 계산
     for i in range(len(beat_times) - 1):
         duration = beat_times[i+1] - beat_times[i]
         cal_meter = expected_duration / duration
         measure_meter.append(cal_meter)
 
-    # 평균 kick 수 구하기
-    tot_meter = sum(measure_meter)  # measure_beats 리스트의 meter 속성의 합계 계산
-    avg_meter_f = tot_meter / len(measure_meter)  # 평균 meter 계산
+    tot_meter = sum(measure_meter)
+    avg_meter_f = tot_meter / len(measure_meter)
     avg_meter = int(round(avg_meter_f * 2) / 2)
-    
-    # Bar를 합쳐서 마디로 만들기
+
     merged_beat_times = []
     for i in range(0, len(beat_times), avg_meter):
-        if i + avg_meter < len(beat_times):  # 다음 Bar가 존재하는 경우에만 합치기
+        if i + avg_meter < len(beat_times):
             merged_beat_times.append((beat_times[i], beat_times[i + avg_meter]))
 
     merged_beats = []
-    # 합쳐진 Bar의 BPM 계산 및 출력
     for i, (start_time, end_time) in enumerate(merged_beat_times):
         measure_duration = end_time - start_time
-        bpm = 60 / measure_duration * bpm_meter.meter 
-        # MergedBeat 인스턴스 생성 및 리스트에 추가
+        bpm = 60 / measure_duration * bpm_meter.meter
         merged_beat = mergedbeat(start=start_time, duration=measure_duration, bpm=bpm)
         merged_beats.append(merged_beat)
+
+    return merged_beats
+
+def separate_instruments(file_path1, file_path2, bpm_meter: BPMMeter, stem):
+    # 노이즈 제거 및 볼륨 맞추기
+    y1, sr1 = librosa.load(file_path1, sr=44100)
+    y2, sr2 = reduce_noise_and_normalize(file_path2)
+    y1 = match_volumes(y2, y1)
+
+    # 임시로 파일 저장
+    temp_file_path2 = file_path2.replace(".wav", "_denoised.wav")
+    sf.write(temp_file_path2, y2, sr2)
+
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        future1 = executor.submit(separate_and_optimize, file_path1, stem)
+        future2 = executor.submit(separate_and_optimize, temp_file_path2, stem)
+
+        paths1 = future1.result()
+        paths2 = future2.result()
+
+    # 임시 파일 삭제
+    if os.path.exists(temp_file_path2):
+        os.remove(temp_file_path2)
+
+    # 병렬 처리가 완료된 후 필요한 추가 작업 수행
+    # BPM 측정
+    expected_duration = 60 / bpm_meter.bpm * bpm_meter.meter
     
-    return paths
+    bpm_results = {}
+    bpm_results['file1'] = analyze_bpm(paths1, expected_duration, bpm_meter)
+    bpm_results['file2'] = analyze_bpm(paths2, expected_duration, bpm_meter)
+
+    return paths1, paths2
 
 def remove_low_amplitude(y, threshold_db):
     # Calculate the amplitude of the signal
